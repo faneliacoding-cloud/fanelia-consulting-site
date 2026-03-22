@@ -509,24 +509,8 @@
   </div>
 
   <script>
-    // ── Fanelia AI Chatbot ──────────────────────────────────────
-    const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY'; // ← replace this
-    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-    const SYSTEM_PROMPT = `You are Fanelia AI, a friendly IT support assistant for Fanelia Consulting LLC in New York.
-
-Services: Mac & Apple repair, virus removal, data recovery, network setup, remote support, system optimization, iPhone/iPad setup, IT consulting.
-Pricing: Starting at $75/hr, transparent pricing, no hidden fees.
-Phone: (347) 702-0988
-Hours: Mon–Fri 9am–7pm, Sat–Sun 10am–5pm. Available remotely anytime.
-Area: New York City and remotely nationwide.
-
-Rules:
-- Keep all replies SHORT (2–4 sentences max).
-- Be warm, helpful, and professional.
-- When someone is ready to book or needs urgent help, always end with: "Call us at (347) 702-0988 or click **Get Help Now** above."
-- Don't invent specific prices for specific jobs — say "starting at $75/hr" or "we'll give you a free estimate."
-- Today's date context: you are a live website assistant.`;
+    // ── Fanelia AI Chatbot (secured via server-side proxy) ──────
+    const CHAT_API = '/api/chat';
 
     let chatOpen = false;
     let chatHistory = [];
@@ -547,11 +531,19 @@ Rules:
       }
     }
 
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
     function addMessage(role, text) {
       const msgs = document.getElementById('chat-messages');
       const div = document.createElement('div');
       div.className = `chat-msg chat-msg-${role}`;
-      div.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      // Escape HTML first, then allow safe bold markdown
+      const safe = escapeHtml(text);
+      div.innerHTML = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
       msgs.appendChild(div);
       msgs.scrollTop = msgs.scrollHeight;
     }
@@ -582,24 +574,19 @@ Rules:
       chatHistory.push({ role: 'user', parts: [{ text }] });
       showTyping();
 
-      if (GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-        removeTyping();
-        addMessage('bot', "To enable AI responses, please add a Gemini API key. In the meantime, reach us at <strong>(347) 702-0988</strong> or click <strong>Get Help Now</strong> above!");
-        document.getElementById('chat-send').disabled = false;
-        return;
-      }
-
       try {
-        const res = await fetch(GEMINI_URL, {
+        const res = await fetch(CHAT_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: chatHistory
-          })
+          body: JSON.stringify({ messages: chatHistory })
         });
         const data = await res.json();
-        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm having trouble right now. Please call us at (347) 702-0988!";
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Server error');
+        }
+
+        const reply = data.reply || "I'm having trouble right now. Please call us at (347) 702-0988!";
         chatHistory.push({ role: 'model', parts: [{ text: reply }] });
         removeTyping();
         addMessage('bot', reply);
