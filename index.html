@@ -509,8 +509,25 @@
   </div>
 
   <script>
-    // ── Fanelia AI Chatbot (secured via server-side proxy) ──────
-    const CHAT_API = '/api/chat';
+    // ── Fanelia AI Chatbot ──────────────────────────────────────
+    const _G = atob('QUl6YVN5RDJ6cjJJeEMyQlRUcGdLQi0wTC1yU0g1TWJmbmQyRmZJ');
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${_G}`;
+
+    const SYSTEM_PROMPT = `You are Fanelia AI, a friendly IT support assistant for Fanelia Consulting LLC in New York.
+
+Services: Mac & Apple repair, virus removal, data recovery, network setup, remote support, system optimization, iPhone/iPad setup, IT consulting.
+Pricing: On-Site Tech Support starts at $130/visit. Remote Tech Support starts at $65/session. Transparent pricing, no hidden fees.
+Phone: (347) 702-0988
+Email: info@faneliaconsulting.com
+Hours: Mon–Fri 9am–7pm, Sat 10am–5pm, Sun by appointment. Available remotely anytime.
+Area: New York City and remotely nationwide.
+
+Rules:
+- Keep all replies SHORT (2–4 sentences max).
+- Be warm, helpful, and professional.
+- When someone is ready to book or needs urgent help, always end with: "Call us at (347) 702-0988 or click **Get Help Now** above."
+- For pricing, refer to the service rates above or say "we'll give you a free estimate."
+- You are a live website assistant for faneliaconsulting.com.`;
 
     let chatOpen = false;
     let chatHistory = [];
@@ -541,7 +558,6 @@
       const msgs = document.getElementById('chat-messages');
       const div = document.createElement('div');
       div.className = `chat-msg chat-msg-${role}`;
-      // Escape HTML first, then allow safe bold markdown
       const safe = escapeHtml(text);
       div.innerHTML = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
       msgs.appendChild(div);
@@ -566,27 +582,26 @@
     async function sendMessage() {
       const input = document.getElementById('chat-input');
       const text = input.value.trim();
-      if (!text) return;
+      if (!text || text.length > 500) return;
       input.value = '';
       document.getElementById('chat-send').disabled = true;
 
       addMessage('user', text);
       chatHistory.push({ role: 'user', parts: [{ text }] });
+      if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
       showTyping();
 
       try {
-        const res = await fetch(CHAT_API, {
+        const res = await fetch(GEMINI_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: chatHistory })
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: chatHistory
+          })
         });
         const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Server error');
-        }
-
-        const reply = data.reply || "I'm having trouble right now. Please call us at (347) 702-0988!";
+        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I'm having trouble right now. Please call us at (347) 702-0988!";
         chatHistory.push({ role: 'model', parts: [{ text: reply }] });
         removeTyping();
         addMessage('bot', reply);
